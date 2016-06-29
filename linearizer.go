@@ -20,22 +20,23 @@ type Linearizer struct {
 	Batcher autofunc.RBatcher
 }
 
-// LinearBatch applies the linearized function to a batch
-// of inputs for the given parameter delta.
+// LinearBatch evaluates the linearized function on a
+// parameter delta and a batch of (constant) inputs.
 //
-// The result supports back-propagation and R-propagation,
-// but it cannot compute gradients or r-gradients for the
-// inputs, which must be held constant.
-func (l *Linearizer) LinearBatch(d ParamDelta, ins autofunc.RResult, n int) autofunc.RResult {
-	output := l.Batcher.BatchR(d.outputRVector(), ins, n)
-	outputR := l.Batcher.BatchR(d.rOutputRVector(), ins, n)
+// The result supports back-propagation and R-propagation
+// through the parameter delta.
+func (l *Linearizer) LinearBatch(d ParamDelta, ins linalg.Vector, n int) autofunc.RResult {
+	insVar := &autofunc.Variable{Vector: ins}
+	insRVar := autofunc.NewRVariable(insVar, autofunc.RVector{})
+
+	output := l.Batcher.BatchR(d.outputRVector(), insRVar, n)
+	outputR := l.Batcher.BatchR(d.rOutputRVector(), insRVar, n)
 	return &linearizerRResult{
 		OutputVec:     output.Output().Copy().Add(output.ROutput()),
 		ROutputVec:    outputR.ROutput(),
 		BatcherOutput: output,
 
-		Inputs: ins,
-		Delta:  d,
+		Delta: d,
 	}
 }
 
@@ -44,8 +45,7 @@ type linearizerRResult struct {
 	ROutputVec    linalg.Vector
 	BatcherOutput autofunc.RResult
 
-	Inputs autofunc.RResult
-	Delta  ParamDelta
+	Delta ParamDelta
 }
 
 func (l *linearizerRResult) Output() linalg.Vector {
@@ -57,14 +57,16 @@ func (l *linearizerRResult) ROutput() linalg.Vector {
 }
 
 func (l *linearizerRResult) Constant(rg autofunc.RGradient, g autofunc.Gradient) bool {
-	return l.BatcherOutput.Constant(rg, g)
+	for _, r := range l.Delta {
+		if !r.Constant(rg, g) {
+			return false
+		}
+	}
+	return true
 }
 
 func (l *linearizerRResult) PropagateRGradient(upstream, upstreamR linalg.Vector,
 	rg autofunc.RGradient, g autofunc.Gradient) {
-	if !l.Inputs.Constant(rg, g) {
-		panic("linearized function's inputs must be constant")
-	}
 	if !l.BatcherOutput.Constant(rg, nil) {
 		gradient := l.Delta.zeroGradient()
 		rGradient := l.Delta.zeroGradient()

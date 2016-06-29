@@ -91,7 +91,7 @@ func linearizerTestOutputs() (actual, expected autofunc.RResult, params *autofun
 	linearizer := &Linearizer{Batcher: newLinearizerTestRBatcher(params)}
 
 	expected = lt.LinearBatch(delta, inputs, len(inputs.Output())/2)
-	actual = linearizer.LinearBatch(delta, inputs, len(inputs.Output())/2)
+	actual = linearizer.LinearBatch(delta, inputs.Output(), len(inputs.Output())/2)
 	return
 }
 
