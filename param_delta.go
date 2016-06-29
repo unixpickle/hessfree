@@ -8,7 +8,7 @@ import (
 // A ParamDelta is a displacement vector (t - t0) where
 // t contains new variable values and t0 contains the
 // current value of those variables.
-type ParamDelta map[*autofunc.Variable]autofunc.RResult
+type ParamDelta map[*autofunc.Variable]autofunc.Result
 
 // outputRVector returns an RVector mapping variables in
 // p to the corresponding RResults' outputs.
@@ -20,9 +20,33 @@ func (p ParamDelta) outputRVector() autofunc.RVector {
 	return res
 }
 
+// zeroGradient produces an autofunc.Gradient with zero
+// vectors for all of the delta's variables.
+func (p ParamDelta) zeroGradient() autofunc.Gradient {
+	res := autofunc.Gradient{}
+	for variable := range p {
+		res[variable] = make(linalg.Vector, len(variable.Vector))
+	}
+	return res
+}
+
+// A ParamRDelta is like a ParamDelta, but each delta
+// has a derivative with respect to a variable R.
+type ParamRDelta map[*autofunc.Variable]autofunc.RResult
+
+// outputRVector returns an RVector mapping variables in
+// p to the corresponding RResults' outputs.
+func (p ParamRDelta) outputRVector() autofunc.RVector {
+	res := autofunc.RVector{}
+	for variable, r := range p {
+		res[variable] = r.Output()
+	}
+	return res
+}
+
 // rOutputRVector is like outputRVector, but it uses the
 // RResults' ROutput instead of their Output.
-func (p ParamDelta) rOutputRVector() autofunc.RVector {
+func (p ParamRDelta) rOutputRVector() autofunc.RVector {
 	res := autofunc.RVector{}
 	for variable, r := range p {
 		res[variable] = r.ROutput()
@@ -32,7 +56,7 @@ func (p ParamDelta) rOutputRVector() autofunc.RVector {
 
 // zeroGradient produces an autofunc.Gradient with zero
 // vectors for all of the delta's variables.
-func (p ParamDelta) zeroGradient() autofunc.Gradient {
+func (p ParamRDelta) zeroGradient() autofunc.Gradient {
 	res := autofunc.Gradient{}
 	for variable := range p {
 		res[variable] = make(linalg.Vector, len(variable.Vector))

@@ -23,6 +23,17 @@ func TestLinearizerOutput(t *testing.T) {
 			t.Error("output", i, "should be", x, "but it's", a)
 		}
 	}
+}
+
+func TestLinearizerROutput(t *testing.T) {
+	actual, expected, _ := linearizerTestROutputs()
+
+	for i, x := range expected.Output() {
+		a := actual.Output()[i]
+		if math.Abs(a-x) > linearizerTestOutputPrecision {
+			t.Error("output", i, "should be", x, "but it's", a)
+		}
+	}
 
 	for i, x := range expected.ROutput() {
 		a := actual.ROutput()[i]
@@ -32,10 +43,10 @@ func TestLinearizerOutput(t *testing.T) {
 	}
 }
 
-func TestLinearizerGradient(t *testing.T) {
+func TestLinearizerRGradient(t *testing.T) {
 	rand.Seed(123)
 
-	actual, expected, deltaVar := linearizerTestOutputs()
+	actual, expected, deltaVar := linearizerTestROutputs()
 
 	upstream := make(linalg.Vector, len(actual.Output()))
 	upstreamR := make(linalg.Vector, len(upstream))
@@ -77,17 +88,41 @@ func TestLinearizerGradient(t *testing.T) {
 	}
 }
 
-func linearizerTestOutputs() (actual, expected autofunc.RResult, deltaVar *autofunc.Variable) {
+func TestLinearizerGradient(t *testing.T) {
+	rand.Seed(123)
+
+	actual, expected, deltaVar := linearizerTestOutputs()
+
+	upstream := make(linalg.Vector, len(actual.Output()))
+	upstreamBackup := make(linalg.Vector, len(upstream))
+	for i := range upstream {
+		upstream[i] = rand.NormFloat64()
+	}
+	copy(upstreamBackup, upstream)
+
+	grad := autofunc.NewGradient([]*autofunc.Variable{deltaVar})
+	actual.PropagateGradient(upstream, grad)
+
+	expectedGrad := autofunc.NewGradient([]*autofunc.Variable{deltaVar})
+	expected.PropagateGradient(upstreamBackup, expectedGrad)
+
+	for variable, expectedVec := range expectedGrad {
+		actualVec := grad[variable]
+		for i, x := range expectedVec {
+			a := actualVec[i]
+			if math.Abs(a-x) > linearizerTestGradPrecision {
+				t.Error("gradient entry", i, "should be", x, "but it's", a)
+			}
+		}
+	}
+}
+
+func linearizerTestOutputs() (actual, expected autofunc.Result, deltaVar *autofunc.Variable) {
 	params := &autofunc.Variable{Vector: []float64{0.78168, -0.26282}}
 	lt := linearizerTest{XY: params}
-	inputs := autofunc.NewRVariable(&autofunc.Variable{
-		Vector: []float64{1, 2, -0.3, 0.3},
-	}, autofunc.RVector{})
+	inputs := &autofunc.Variable{Vector: []float64{1, 2, -0.3, 0.3}}
 	deltaVar = &autofunc.Variable{Vector: []float64{-0.19416, 0.61623}}
-	delta := ParamDelta{
-		params: autofunc.NewRVariable(deltaVar,
-			autofunc.RVector{deltaVar: []float64{0.333, -0.414}}),
-	}
+	delta := ParamDelta{params: deltaVar}
 	linearizer := &Linearizer{Batcher: newLinearizerTestRBatcher(params)}
 
 	expected = lt.LinearBatch(delta, inputs, len(inputs.Output())/2)
@@ -95,11 +130,42 @@ func linearizerTestOutputs() (actual, expected autofunc.RResult, deltaVar *autof
 	return
 }
 
+func linearizerTestROutputs() (actual, expected autofunc.RResult, deltaVar *autofunc.Variable) {
+	params := &autofunc.Variable{Vector: []float64{0.78168, -0.26282}}
+	lt := linearizerTest{XY: params}
+	inputs := autofunc.NewRVariable(&autofunc.Variable{
+		Vector: []float64{1, 2, -0.3, 0.3},
+	}, autofunc.RVector{})
+	deltaVar = &autofunc.Variable{Vector: []float64{-0.19416, 0.61623}}
+	delta := ParamRDelta{
+		params: autofunc.NewRVariable(deltaVar,
+			autofunc.RVector{deltaVar: []float64{0.333, -0.414}}),
+	}
+	linearizer := &Linearizer{Batcher: newLinearizerTestRBatcher(params)}
+
+	expected = lt.LinearBatchR(delta, inputs, len(inputs.Output())/2)
+	actual = linearizer.LinearBatchR(delta, inputs.Output(), len(inputs.Output())/2)
+	return
+}
+
 type linearizerTest struct {
 	XY *autofunc.Variable
 }
 
-func (l *linearizerTest) LinearBatch(d ParamDelta, ins autofunc.RResult, n int) autofunc.RResult {
+func (l *linearizerTest) LinearBatch(d ParamDelta, ins autofunc.Result, n int) autofunc.Result {
+	var results []autofunc.Result
+	for i := 0; i < n*2; i += 2 {
+		a, b := ins.Output()[i], ins.Output()[i+1]
+		mat := l.jacobian(a, b)
+		initial := l.initialValue(a, b).(*autofunc.RVariable).Variable
+		jacobianProduct := mat.Apply(d[l.XY])
+		results = append(results, autofunc.Add(jacobianProduct, initial))
+	}
+	return autofunc.Concat(results...)
+}
+
+func (l *linearizerTest) LinearBatchR(d ParamRDelta, ins autofunc.RResult,
+	n int) autofunc.RResult {
 	var results []autofunc.RResult
 	for i := 0; i < n*2; i += 2 {
 		a, b := ins.Output()[i], ins.Output()[i+1]
