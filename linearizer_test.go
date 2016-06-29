@@ -2,28 +2,20 @@ package hessfree
 
 import (
 	"math"
+	"math/rand"
 	"testing"
 
 	"github.com/unixpickle/autofunc"
+	"github.com/unixpickle/num-analysis/linalg"
 )
 
-const linearizerTestOutputPrecision = 1e-5
+const (
+	linearizerTestOutputPrecision = 1e-5
+	linearizerTestGradPrecision   = 1e-5
+)
 
 func TestLinearizerOutput(t *testing.T) {
-	paramVars := &autofunc.Variable{Vector: []float64{0.78168, -0.26282}}
-	lt := linearizerTest{XY: paramVars}
-	inputs := autofunc.NewRVariable(&autofunc.Variable{
-		Vector: []float64{1, 2, -0.3, 0.3},
-	}, autofunc.RVector{})
-	deltaVar := &autofunc.Variable{Vector: []float64{-0.19416, 0.61623}}
-	delta := ParamDelta{
-		paramVars: autofunc.NewRVariable(deltaVar,
-			autofunc.RVector{deltaVar: []float64{0.333, -0.414}}),
-	}
-	linearizer := &Linearizer{Batcher: newLinearizerTestRBatcher(paramVars)}
-
-	expected := lt.LinearBatch(delta, inputs, len(inputs.Output())/2)
-	actual := linearizer.LinearBatch(delta, inputs, len(inputs.Output())/2)
+	actual, expected, _ := linearizerTestOutputs()
 
 	for i, x := range expected.Output() {
 		a := actual.Output()[i]
@@ -38,6 +30,69 @@ func TestLinearizerOutput(t *testing.T) {
 			t.Error("r-output", i, "should be", x, "but it's", a)
 		}
 	}
+}
+
+func TestLinearizerGradient(t *testing.T) {
+	rand.Seed(123)
+
+	actual, expected, params := linearizerTestOutputs()
+
+	upstream := make(linalg.Vector, len(actual.Output()))
+	upstreamR := make(linalg.Vector, len(upstream))
+	upstreamBackup := make(linalg.Vector, len(upstream))
+	upstreamRBackup := make(linalg.Vector, len(upstream))
+	for i := range upstream {
+		upstream[i] = rand.NormFloat64()
+		upstreamR[i] = rand.NormFloat64()
+	}
+	copy(upstreamBackup, upstream)
+	copy(upstreamRBackup, upstreamR)
+
+	grad := autofunc.NewGradient([]*autofunc.Variable{params})
+	rgrad := autofunc.NewRGradient([]*autofunc.Variable{params})
+	actual.PropagateRGradient(upstream, upstreamR, rgrad, grad)
+
+	expectedGrad := autofunc.NewGradient([]*autofunc.Variable{params})
+	expectedRGrad := autofunc.NewRGradient([]*autofunc.Variable{params})
+	expected.PropagateRGradient(upstreamBackup, upstreamRBackup, expectedRGrad, expectedGrad)
+
+	for variable, expectedVec := range expectedGrad {
+		actualVec := grad[variable]
+		for i, x := range expectedVec {
+			a := actualVec[i]
+			if math.Abs(a-x) > linearizerTestGradPrecision {
+				t.Error("gradient entry", i, "should be", x, "but it's", a)
+			}
+		}
+	}
+
+	for variable, expectedVec := range expectedRGrad {
+		actualVec := rgrad[variable]
+		for i, x := range expectedVec {
+			a := actualVec[i]
+			if math.Abs(a-x) > linearizerTestGradPrecision {
+				t.Error("r-gradient entry", i, "should be", x, "but it's", a)
+			}
+		}
+	}
+}
+
+func linearizerTestOutputs() (actual, expected autofunc.RResult, params *autofunc.Variable) {
+	params = &autofunc.Variable{Vector: []float64{0.78168, -0.26282}}
+	lt := linearizerTest{XY: params}
+	inputs := autofunc.NewRVariable(&autofunc.Variable{
+		Vector: []float64{1, 2, -0.3, 0.3},
+	}, autofunc.RVector{})
+	deltaVar := &autofunc.Variable{Vector: []float64{-0.19416, 0.61623}}
+	delta := ParamDelta{
+		params: autofunc.NewRVariable(deltaVar,
+			autofunc.RVector{deltaVar: []float64{0.333, -0.414}}),
+	}
+	linearizer := &Linearizer{Batcher: newLinearizerTestRBatcher(params)}
+
+	expected = lt.LinearBatch(delta, inputs, len(inputs.Output())/2)
+	actual = linearizer.LinearBatch(delta, inputs, len(inputs.Output())/2)
+	return
 }
 
 type linearizerTest struct {
