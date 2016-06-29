@@ -67,20 +67,18 @@ func (l *linearizerRResult) Constant(rg autofunc.RGradient, g autofunc.Gradient)
 
 func (l *linearizerRResult) PropagateRGradient(upstream, upstreamR linalg.Vector,
 	rg autofunc.RGradient, g autofunc.Gradient) {
-	if !l.BatcherOutput.Constant(rg, nil) {
-		gradient := l.Delta.zeroGradient()
-		rGradient := l.Delta.zeroGradient()
+	gradient := l.Delta.zeroGradient()
+	rGradient := l.Delta.zeroGradient()
 
-		// Back-propagation is equivalent to left-multiplication by the Jacobian.
-		zeroVec := make(linalg.Vector, len(upstream))
-		l.BatcherOutput.PropagateRGradient(upstream, zeroVec, autofunc.RGradient{},
-			gradient)
-		l.BatcherOutput.PropagateRGradient(upstreamR, zeroVec, autofunc.RGradient{},
-			rGradient)
+	// Back-propagation is equivalent to left-multiplication by the Jacobian.
+	zeroVec := make(linalg.Vector, len(upstream))
+	l.BatcherOutput.PropagateRGradient(upstream, zeroVec, autofunc.RGradient{},
+		gradient)
+	l.BatcherOutput.PropagateRGradient(upstreamR, zeroVec, autofunc.RGradient{},
+		rGradient)
 
-		for variable, downstream := range gradient {
-			downstreamR := rGradient[variable]
-			l.Delta[variable].PropagateRGradient(downstream, downstreamR, rg, g)
-		}
+	for variable, downstream := range gradient {
+		downstreamR := rGradient[variable]
+		l.Delta[variable].PropagateRGradient(downstream, downstreamR, rg, g)
 	}
 }

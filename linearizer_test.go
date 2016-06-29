@@ -35,7 +35,7 @@ func TestLinearizerOutput(t *testing.T) {
 func TestLinearizerGradient(t *testing.T) {
 	rand.Seed(123)
 
-	actual, expected, params := linearizerTestOutputs()
+	actual, expected, deltaVar := linearizerTestOutputs()
 
 	upstream := make(linalg.Vector, len(actual.Output()))
 	upstreamR := make(linalg.Vector, len(upstream))
@@ -48,12 +48,12 @@ func TestLinearizerGradient(t *testing.T) {
 	copy(upstreamBackup, upstream)
 	copy(upstreamRBackup, upstreamR)
 
-	grad := autofunc.NewGradient([]*autofunc.Variable{params})
-	rgrad := autofunc.NewRGradient([]*autofunc.Variable{params})
+	grad := autofunc.NewGradient([]*autofunc.Variable{deltaVar})
+	rgrad := autofunc.NewRGradient([]*autofunc.Variable{deltaVar})
 	actual.PropagateRGradient(upstream, upstreamR, rgrad, grad)
 
-	expectedGrad := autofunc.NewGradient([]*autofunc.Variable{params})
-	expectedRGrad := autofunc.NewRGradient([]*autofunc.Variable{params})
+	expectedGrad := autofunc.NewGradient([]*autofunc.Variable{deltaVar})
+	expectedRGrad := autofunc.NewRGradient([]*autofunc.Variable{deltaVar})
 	expected.PropagateRGradient(upstreamBackup, upstreamRBackup, expectedRGrad, expectedGrad)
 
 	for variable, expectedVec := range expectedGrad {
@@ -77,13 +77,13 @@ func TestLinearizerGradient(t *testing.T) {
 	}
 }
 
-func linearizerTestOutputs() (actual, expected autofunc.RResult, params *autofunc.Variable) {
-	params = &autofunc.Variable{Vector: []float64{0.78168, -0.26282}}
+func linearizerTestOutputs() (actual, expected autofunc.RResult, deltaVar *autofunc.Variable) {
+	params := &autofunc.Variable{Vector: []float64{0.78168, -0.26282}}
 	lt := linearizerTest{XY: params}
 	inputs := autofunc.NewRVariable(&autofunc.Variable{
 		Vector: []float64{1, 2, -0.3, 0.3},
 	}, autofunc.RVector{})
-	deltaVar := &autofunc.Variable{Vector: []float64{-0.19416, 0.61623}}
+	deltaVar = &autofunc.Variable{Vector: []float64{-0.19416, 0.61623}}
 	delta := ParamDelta{
 		params: autofunc.NewRVariable(deltaVar,
 			autofunc.RVector{deltaVar: []float64{0.333, -0.414}}),
