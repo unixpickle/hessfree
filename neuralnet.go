@@ -16,8 +16,8 @@ import (
 // and output layer are matching as described in
 // http://nic.schraudolph.org/pubs/Schraudolph02.pdf.
 type GaussNewtonNN struct {
-	Layers neuralnet.Network
-	Output neuralnet.Network
+	Layers autofunc.RBatcher
+	Output autofunc.RBatcher
 	Cost   neuralnet.CostFunc
 }
 
@@ -94,7 +94,7 @@ func (g *GaussNewtonNN) Objective(delta ConstParamDelta, s sgd.SampleSet) float6
 // constant while the layers are linearized).
 func (g *GaussNewtonNN) objective(delta ParamDelta, s sgd.SampleSet) autofunc.Result {
 	sampleIns, sampleOuts := joinSamples(s)
-	layerOutput := LinApprox(g.Layers.BatchLearner(), delta, sampleIns, s.Len())
+	layerOutput := LinApprox(g.Layers, delta, sampleIns, s.Len())
 	x0 := layerOutput.(*linearizerResult).BatcherOutput.Output()
 	return QuadApprox(g.outFunc(sampleOuts, s.Len()), x0, layerOutput)
 }
@@ -102,14 +102,14 @@ func (g *GaussNewtonNN) objective(delta ParamDelta, s sgd.SampleSet) autofunc.Re
 // objectiveR is like objective, but for RResults.
 func (g *GaussNewtonNN) objectiveR(delta ParamRDelta, s sgd.SampleSet) autofunc.RResult {
 	sampleIns, sampleOuts := joinSamples(s)
-	layerOutput := LinApproxR(g.Layers.BatchLearner(), delta, sampleIns, s.Len())
+	layerOutput := LinApproxR(g.Layers, delta, sampleIns, s.Len())
 	x0 := layerOutput.(*linearizerRResult).BatcherOutput.Output()
 	return QuadApproxR(g.outFunc(sampleOuts, s.Len()), x0, layerOutput)
 }
 
 func (g *GaussNewtonNN) outFunc(expectedOuts linalg.Vector, n int) autofunc.RFunc {
 	return &netOutFunc{
-		LastLayer:   g.Output.BatchLearner(),
+		LastLayer:   g.Output,
 		CostFunc:    g.Cost,
 		SampleOuts:  expectedOuts,
 		SampleCount: n,
