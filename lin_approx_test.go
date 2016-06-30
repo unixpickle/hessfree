@@ -123,10 +123,10 @@ func linearizerTestOutputs() (actual, expected autofunc.Result, deltaVar *autofu
 	inputs := &autofunc.Variable{Vector: []float64{1, 2, -0.3, 0.3}}
 	deltaVar = &autofunc.Variable{Vector: []float64{-0.19416, 0.61623}}
 	delta := ParamDelta{params: deltaVar}
-	linearizer := &Linearizer{Batcher: newLinearizerTestRBatcher(params)}
+	batcher := newLinearizerTestRBatcher(params)
 
 	expected = lt.LinearBatch(delta, inputs, len(inputs.Output())/2)
-	actual = linearizer.LinearBatch(delta, inputs.Output(), len(inputs.Output())/2)
+	actual = LinApprox(batcher, delta, inputs.Output(), len(inputs.Output())/2)
 	return
 }
 
@@ -141,10 +141,10 @@ func linearizerTestROutputs() (actual, expected autofunc.RResult, deltaVar *auto
 		params: autofunc.NewRVariable(deltaVar,
 			autofunc.RVector{deltaVar: []float64{0.333, -0.414}}),
 	}
-	linearizer := &Linearizer{Batcher: newLinearizerTestRBatcher(params)}
+	batcher := newLinearizerTestRBatcher(params)
 
 	expected = lt.LinearBatchR(delta, inputs, len(inputs.Output())/2)
-	actual = linearizer.LinearBatchR(delta, inputs.Output(), len(inputs.Output())/2)
+	actual = LinApproxR(batcher, delta, inputs.Output(), len(inputs.Output())/2)
 	return
 }
 

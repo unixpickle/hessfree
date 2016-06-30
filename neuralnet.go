@@ -33,10 +33,7 @@ type GaussNewtonNN struct {
 // constant while the layers are linearized).
 func (g *GaussNewtonNN) Objective(delta ParamDelta, s sgd.SampleSet) autofunc.Result {
 	sampleIns, sampleOuts := joinSamples(s)
-
-	linearizer := Linearizer{Batcher: g.Layers.BatchLearner()}
-	layerOutput := linearizer.LinearBatch(delta, sampleIns, s.Len())
-
+	layerOutput := LinApprox(g.Layers.BatchLearner(), delta, sampleIns, s.Len())
 	x0 := layerOutput.(*linearizerResult).BatcherOutput.Output()
 	return QuadApprox(g.outFunc(sampleOuts, s.Len()), x0, layerOutput)
 }
@@ -44,10 +41,7 @@ func (g *GaussNewtonNN) Objective(delta ParamDelta, s sgd.SampleSet) autofunc.Re
 // ObjectiveR is like Objective, but for RResults.
 func (g *GaussNewtonNN) ObjectiveR(delta ParamRDelta, s sgd.SampleSet) autofunc.RResult {
 	sampleIns, sampleOuts := joinSamples(s)
-
-	linearizer := Linearizer{Batcher: g.Layers.BatchLearner()}
-	layerOutput := linearizer.LinearBatchR(delta, sampleIns, s.Len())
-
+	layerOutput := LinApproxR(g.Layers.BatchLearner(), delta, sampleIns, s.Len())
 	x0 := layerOutput.(*linearizerRResult).BatcherOutput.Output()
 	return QuadApproxR(g.outFunc(sampleOuts, s.Len()), x0, layerOutput)
 }

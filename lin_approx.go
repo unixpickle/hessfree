@@ -5,30 +5,20 @@ import (
 	"github.com/unixpickle/num-analysis/linalg"
 )
 
-// A Linearizer approxmitase an autofunc.RBatcher as a
-// linear function of its underlying variables.
-// The batcher is not linearized with respect to its
-// actual inputs, as these are generally constant while
-// training/optimization (for a mini-batch).
-//
-// For a neural network, part of approximating the
-// Gauss-Newton matrix involves linearizing all of the
-// layers up to the output and cost layers.
-// This can be done by wrapping said layers in a single
-// Linearizer.
-type Linearizer struct {
-	Batcher autofunc.RBatcher
-}
-
-// LinearBatch evaluates the linearized function on a
-// parameter delta and a batch of (constant) inputs.
+// LinApprox approximates the batcher as a linear
+// function of its underlying variables, holding its
+// inputs constant.
+// The linear approximation is centered around the
+// batcher's current underlying variables, and the
+// argument to the approximation's Jacobian is given
+// as a ParamDelta.
 //
 // The result supports back-propagation through the
 // parameter delta.
-func (l *Linearizer) LinearBatch(d ParamDelta, ins linalg.Vector, n int) autofunc.Result {
+func LinApprox(b autofunc.RBatcher, d ParamDelta, ins linalg.Vector, n int) autofunc.Result {
 	insVar := &autofunc.Variable{Vector: ins}
 	insRVar := autofunc.NewRVariable(insVar, autofunc.RVector{})
-	output := l.Batcher.BatchR(d.outputRVector(), insRVar, n)
+	output := b.BatchR(d.outputRVector(), insRVar, n)
 	return &linearizerResult{
 		OutputVec:     output.Output().Copy().Add(output.ROutput()),
 		BatcherOutput: output,
@@ -36,14 +26,14 @@ func (l *Linearizer) LinearBatch(d ParamDelta, ins linalg.Vector, n int) autofun
 	}
 }
 
-// LinearBatchR is like LinearBatch, but with forward
-// automatic differentation (R-operator) support.
-func (l *Linearizer) LinearBatchR(d ParamRDelta, ins linalg.Vector, n int) autofunc.RResult {
+// LinApproxR is like LinApprox but with R-operator
+// support.
+func LinApproxR(b autofunc.RBatcher, d ParamRDelta, ins linalg.Vector, n int) autofunc.RResult {
 	insVar := &autofunc.Variable{Vector: ins}
 	insRVar := autofunc.NewRVariable(insVar, autofunc.RVector{})
 
-	output := l.Batcher.BatchR(d.outputRVector(), insRVar, n)
-	outputR := l.Batcher.BatchR(d.rOutputRVector(), insRVar, n)
+	output := b.BatchR(d.outputRVector(), insRVar, n)
+	outputR := b.BatchR(d.rOutputRVector(), insRVar, n)
 	return &linearizerRResult{
 		OutputVec:     output.Output().Copy().Add(output.ROutput()),
 		ROutputVec:    outputR.ROutput(),
