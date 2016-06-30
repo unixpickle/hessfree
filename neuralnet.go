@@ -36,9 +36,9 @@ func (g *GaussNewtonNN) Objective(delta ParamDelta, s sgd.SampleSet) autofunc.Re
 
 	linearizer := Linearizer{Batcher: g.Layers.BatchLearner()}
 	layerOutput := linearizer.LinearBatch(delta, sampleIns, s.Len())
-	netOutput := g.Output.BatchLearner().Batch(layerOutput, s.Len())
 
-	return g.Cost.Cost(sampleOuts, netOutput)
+	x0 := layerOutput.(*linearizerResult).BatcherOutput.Output()
+	return QuadApprox(g.outFunc(sampleOuts, s.Len()), x0, layerOutput)
 }
 
 // ObjectiveR is like Objective, but for RResults.
@@ -47,9 +47,18 @@ func (g *GaussNewtonNN) ObjectiveR(delta ParamRDelta, s sgd.SampleSet) autofunc.
 
 	linearizer := Linearizer{Batcher: g.Layers.BatchLearner()}
 	layerOutput := linearizer.LinearBatchR(delta, sampleIns, s.Len())
-	netOutput := g.Output.BatchLearner().BatchR(autofunc.RVector{}, layerOutput, s.Len())
 
-	return g.Cost.CostR(autofunc.RVector{}, sampleOuts, netOutput)
+	x0 := layerOutput.(*linearizerRResult).BatcherOutput.Output()
+	return QuadApproxR(g.outFunc(sampleOuts, s.Len()), x0, layerOutput)
+}
+
+func (g *GaussNewtonNN) outFunc(expectedOuts linalg.Vector, n int) autofunc.RFunc {
+	return &netOutFunc{
+		LastLayer:   g.Output.BatchLearner(),
+		CostFunc:    g.Cost,
+		SampleOuts:  expectedOuts,
+		SampleCount: n,
+	}
 }
 
 func joinSamples(s sgd.SampleSet) (ins, outs linalg.Vector) {
@@ -70,4 +79,21 @@ func joinSamples(s sgd.SampleSet) (ins, outs linalg.Vector) {
 	}
 
 	return
+}
+
+type netOutFunc struct {
+	LastLayer   autofunc.RBatcher
+	CostFunc    neuralnet.CostFunc
+	SampleOuts  linalg.Vector
+	SampleCount int
+}
+
+func (n *netOutFunc) Apply(in autofunc.Result) autofunc.Result {
+	out1 := n.LastLayer.Batch(in, n.SampleCount)
+	return n.CostFunc.Cost(n.SampleOuts, out1)
+}
+
+func (n *netOutFunc) ApplyR(v autofunc.RVector, in autofunc.RResult) autofunc.RResult {
+	out1 := n.LastLayer.BatchR(v, in, n.SampleCount)
+	return n.CostFunc.CostR(v, n.SampleOuts, out1)
 }
