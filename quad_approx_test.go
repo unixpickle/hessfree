@@ -28,7 +28,7 @@ func TestQuadApproxROutput(t *testing.T) {
 	inputVec := &autofunc.Variable{Vector: []float64{-0.383238, 0.945592}}
 	inputRVec := &autofunc.RVariable{
 		Variable:   inputVec,
-		ROutputVec: linalg.Vector{0.23427, -0.57973},
+		ROutputVec: []float64{0.23427, -0.57973},
 	}
 	centerVec := linalg.Vector{0.77892, 0.57992}
 
@@ -47,7 +47,7 @@ func TestQuadApproxGradient(t *testing.T) {
 	inputVec := &autofunc.Variable{Vector: []float64{-0.383238, 0.945592}}
 	inputRVec := &autofunc.RVariable{
 		Variable:   inputVec,
-		ROutputVec: linalg.Vector{0.23427, -0.57973},
+		ROutputVec: []float64{0.23427, -0.57973},
 	}
 	centerVec := linalg.Vector{0.77892, 0.57992}
 
