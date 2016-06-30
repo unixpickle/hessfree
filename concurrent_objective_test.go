@@ -31,6 +31,32 @@ func TestConcurrentObjectiveBasic(t *testing.T) {
 	testObjectiveEquivalence(t, concurrentObj, obj, delta, samples)
 }
 
+func TestConcurrentObjectiveBasicMultiple(t *testing.T) {
+	obj, delta := objectiveTestFunc()
+	samples := objectiveTestSamples(5)
+
+	concurrentObj := &ConcurrentObjective{
+		MaxConcurrency: 1,
+		MaxSubBatch:    1,
+		Wrapped:        obj,
+	}
+
+	testObjectiveEquivalence(t, concurrentObj, obj, delta, samples)
+}
+
+func TestConcurrentObjectiveConcurrentBatches(t *testing.T) {
+	obj, delta := objectiveTestFunc()
+	samples := objectiveTestSamples(11)
+
+	concurrentObj := &ConcurrentObjective{
+		MaxConcurrency: 4,
+		MaxSubBatch:    2,
+		Wrapped:        obj,
+	}
+
+	testObjectiveEquivalence(t, concurrentObj, obj, delta, samples)
+}
+
 func objectiveTestFunc() (*GaussNewtonNN, ConstParamDelta) {
 	rand.Seed(123)
 	net := &neuralnet.Network{
