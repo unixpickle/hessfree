@@ -43,6 +43,78 @@ func TestQuadApproxROutput(t *testing.T) {
 	}
 }
 
+func TestQuadApproxGradient(t *testing.T) {
+	inputVec := &autofunc.Variable{Vector: []float64{-0.383238, 0.945592}}
+	inputRVec := &autofunc.RVariable{
+		Variable:   inputVec,
+		ROutputVec: linalg.Vector{0.23427, -0.57973},
+	}
+	centerVec := linalg.Vector{0.77892, 0.57992}
+
+	expected := quadApproxTestEvalR(centerVec, inputRVec)
+	actual := QuadApproxR(quadApproxTestFunc{}, centerVec, inputRVec)
+
+	upstream1 := []float64{0.61045}
+	upstreamR1 := []float64{-0.31045}
+	upstream2 := []float64{0.61045}
+	upstreamR2 := []float64{-0.31045}
+
+	expectedGrad := autofunc.NewGradient([]*autofunc.Variable{inputVec})
+	expectedRGrad := autofunc.NewRGradient([]*autofunc.Variable{inputVec})
+	expected.PropagateRGradient(upstream1, upstreamR1, expectedRGrad, expectedGrad)
+
+	actualGrad := autofunc.NewGradient([]*autofunc.Variable{inputVec})
+	actualRGrad := autofunc.NewRGradient([]*autofunc.Variable{inputVec})
+	actual.PropagateRGradient(upstream2, upstreamR2, actualRGrad, actualGrad)
+
+	for variable, xVec := range expectedGrad {
+		aVec := actualGrad[variable]
+		for i, x := range xVec {
+			a := aVec[i]
+			if math.Abs(x-a) > quadApproxTestPrec {
+				t.Error("expected partial", i, "to be", x, "but it's", a)
+			}
+		}
+	}
+
+	for variable, xVec := range expectedRGrad {
+		aVec := actualRGrad[variable]
+		for i, x := range xVec {
+			a := aVec[i]
+			if math.Abs(x-a) > quadApproxTestPrec {
+				t.Error("expected r-partial", i, "to be", x, "but it's", a)
+			}
+		}
+	}
+}
+
+func TestQuadApproxRGradient(t *testing.T) {
+	inputVec := &autofunc.Variable{Vector: []float64{-0.383238, 0.945592}}
+	centerVec := linalg.Vector{0.77892, 0.57992}
+
+	expected := quadApproxTestEval(centerVec, inputVec)
+	actual := QuadApprox(quadApproxTestFunc{}, centerVec, inputVec)
+
+	upstream1 := []float64{0.61045}
+	upstream2 := []float64{0.61045}
+
+	expectedGrad := autofunc.NewGradient([]*autofunc.Variable{inputVec})
+	expected.PropagateGradient(upstream1, expectedGrad)
+
+	actualGrad := autofunc.NewGradient([]*autofunc.Variable{inputVec})
+	actual.PropagateGradient(upstream2, actualGrad)
+
+	for variable, xVec := range expectedGrad {
+		aVec := actualGrad[variable]
+		for i, x := range xVec {
+			a := aVec[i]
+			if math.Abs(x-a) > quadApproxTestPrec {
+				t.Error("expected partial", i, "to be", x, "but it's", a)
+			}
+		}
+	}
+}
+
 type quadApproxTestFunc struct{}
 
 func (_ quadApproxTestFunc) Apply(in autofunc.Result) autofunc.Result {
