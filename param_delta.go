@@ -63,3 +63,7 @@ func (p ParamRDelta) zeroGradient() autofunc.Gradient {
 	}
 	return res
 }
+
+// A ConstParamDelta is like a ParamDelta, except that
+// the delta vectors are constant vectors.
+type ConstParamDelta map[*autofunc.Variable]linalg.Vector

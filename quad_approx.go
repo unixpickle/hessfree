@@ -172,6 +172,10 @@ func (q *quadApproxRResult) PropagateRGradient(upstream, upstreamR linalg.Vector
 		return
 	}
 	q.Lock.Lock()
+
+	// TODO: optimize this if the input is from a Linearizer and
+	// the Linearizer's input is from an RVariable.
+
 	if q.EvalResult == nil {
 		q.evaluate()
 	}

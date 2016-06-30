@@ -21,7 +21,68 @@ type GaussNewtonNN struct {
 	Cost   neuralnet.CostFunc
 }
 
-// Objective evaluates the approximated objective
+// ObjectiveHessian applies the Hessian of the
+// Gauss-Newton approximation to the given delta.
+func (g *GaussNewtonNN) ObjectiveHessian(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
+	rDelta := ParamRDelta{}
+	var tempVariables []*autofunc.Variable
+	var mapVariables []*autofunc.Variable
+	for variable, d := range delta {
+		zeroVar := &autofunc.Variable{Vector: make(linalg.Vector, len(d))}
+		rDelta[variable] = &autofunc.RVariable{
+			Variable:   zeroVar,
+			ROutputVec: d,
+		}
+		tempVariables = append(tempVariables, zeroVar)
+		mapVariables = append(mapVariables, variable)
+	}
+	output := g.objectiveR(rDelta, s)
+
+	rgrad := autofunc.NewRGradient(tempVariables)
+	output.PropagateRGradient([]float64{1}, []float64{0}, rgrad, nil)
+
+	res := ConstParamDelta{}
+	for i, mapVariable := range mapVariables {
+		res[mapVariable] = rgrad[tempVariables[i]]
+	}
+	return res
+}
+
+// ObjectiveGradient computes the gradient of Gauss-
+// Newton approximation at the given delta.
+func (g *GaussNewtonNN) ObjectiveGrad(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
+	argDelta := ParamDelta{}
+	var tempVariables []*autofunc.Variable
+	var mapVariables []*autofunc.Variable
+	for variable, d := range delta {
+		tempVar := &autofunc.Variable{Vector: d}
+		argDelta[variable] = tempVar
+		tempVariables = append(tempVariables, tempVar)
+		mapVariables = append(mapVariables, variable)
+	}
+	output := g.objective(argDelta, s)
+
+	grad := autofunc.NewGradient(tempVariables)
+	output.PropagateGradient([]float64{1}, grad)
+
+	res := ConstParamDelta{}
+	for i, mapVariable := range mapVariables {
+		res[mapVariable] = grad[tempVariables[i]]
+	}
+	return res
+}
+
+// Objective evaluates the Gauss-Newton approximation
+// at the given delta.
+func (g *GaussNewtonNN) Objective(delta ConstParamDelta, s sgd.SampleSet) float64 {
+	argDelta := ParamDelta{}
+	for variable, d := range delta {
+		argDelta[variable] = &autofunc.Variable{Vector: d}
+	}
+	return g.objective(argDelta, s).Output()[0]
+}
+
+// objective evaluates the approximated objective
 // (cost) function given a SampleSet full of
 // neuralnet.VectorSample instances.
 //
@@ -31,15 +92,15 @@ type GaussNewtonNN struct {
 // parameter delta, but not through the parameters
 // of the neural network's layers (as these are held
 // constant while the layers are linearized).
-func (g *GaussNewtonNN) Objective(delta ParamDelta, s sgd.SampleSet) autofunc.Result {
+func (g *GaussNewtonNN) objective(delta ParamDelta, s sgd.SampleSet) autofunc.Result {
 	sampleIns, sampleOuts := joinSamples(s)
 	layerOutput := LinApprox(g.Layers.BatchLearner(), delta, sampleIns, s.Len())
 	x0 := layerOutput.(*linearizerResult).BatcherOutput.Output()
 	return QuadApprox(g.outFunc(sampleOuts, s.Len()), x0, layerOutput)
 }
 
-// ObjectiveR is like Objective, but for RResults.
-func (g *GaussNewtonNN) ObjectiveR(delta ParamRDelta, s sgd.SampleSet) autofunc.RResult {
+// objectiveR is like objective, but for RResults.
+func (g *GaussNewtonNN) objectiveR(delta ParamRDelta, s sgd.SampleSet) autofunc.RResult {
 	sampleIns, sampleOuts := joinSamples(s)
 	layerOutput := LinApproxR(g.Layers.BatchLearner(), delta, sampleIns, s.Len())
 	x0 := layerOutput.(*linearizerRResult).BatcherOutput.Output()
