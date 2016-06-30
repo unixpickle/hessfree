@@ -95,10 +95,11 @@ func (c *ConcurrentObjective) sumDeltas(r func(sgd.SampleSet) ConstParamDelta,
 	for delta := range deltaChan {
 		if res == nil {
 			res = delta
-		}
-		for variable, v := range delta {
-			resVec := res[variable]
-			resVec.Add(v)
+		} else {
+			for variable, v := range delta {
+				resVec := res[variable]
+				resVec.Add(v)
+			}
 		}
 	}
 
@@ -135,6 +136,7 @@ func (c *ConcurrentObjective) subBatchChan(s sgd.SampleSet) <-chan sgd.SampleSet
 		}
 		res <- s.Subset(i, i+bs)
 	}
+	close(res)
 
 	return res
 }
