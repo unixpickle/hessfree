@@ -21,9 +21,43 @@ type GaussNewtonNN struct {
 	Cost   neuralnet.CostFunc
 }
 
-// ObjectiveHessian applies the Hessian of the
-// Gauss-Newton approximation to the given delta.
-func (g *GaussNewtonNN) ObjectiveHessian(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
+// Quad evaluates the Gauss-Newton approximation
+// at the given delta.
+func (g *GaussNewtonNN) Quad(delta ConstParamDelta, s sgd.SampleSet) float64 {
+	argDelta := ParamDelta{}
+	for variable, d := range delta {
+		argDelta[variable] = &autofunc.Variable{Vector: d}
+	}
+	return g.objective(argDelta, s).Output()[0]
+}
+
+// QuadGradient computes the gradient of Gauss-Newton
+// approximation at the given delta.
+func (g *GaussNewtonNN) QuadGrad(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
+	argDelta := ParamDelta{}
+	var tempVariables []*autofunc.Variable
+	var mapVariables []*autofunc.Variable
+	for variable, d := range delta {
+		tempVar := &autofunc.Variable{Vector: d}
+		argDelta[variable] = tempVar
+		tempVariables = append(tempVariables, tempVar)
+		mapVariables = append(mapVariables, variable)
+	}
+	output := g.objective(argDelta, s)
+
+	grad := autofunc.NewGradient(tempVariables)
+	output.PropagateGradient([]float64{1}, grad)
+
+	res := ConstParamDelta{}
+	for i, mapVariable := range mapVariables {
+		res[mapVariable] = grad[tempVariables[i]]
+	}
+	return res
+}
+
+// QuadHessian applies the Hessian of the Gauss-Newton
+// approximation to the given delta.
+func (g *GaussNewtonNN) QuadHessian(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
 	rDelta := ParamRDelta{}
 	var tempVariables []*autofunc.Variable
 	var mapVariables []*autofunc.Variable
@@ -48,38 +82,14 @@ func (g *GaussNewtonNN) ObjectiveHessian(delta ConstParamDelta, s sgd.SampleSet)
 	return res
 }
 
-// ObjectiveGradient computes the gradient of Gauss-
-// Newton approximation at the given delta.
-func (g *GaussNewtonNN) ObjectiveGrad(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
-	argDelta := ParamDelta{}
-	var tempVariables []*autofunc.Variable
-	var mapVariables []*autofunc.Variable
-	for variable, d := range delta {
-		tempVar := &autofunc.Variable{Vector: d}
-		argDelta[variable] = tempVar
-		tempVariables = append(tempVariables, tempVar)
-		mapVariables = append(mapVariables, variable)
-	}
-	output := g.objective(argDelta, s)
-
-	grad := autofunc.NewGradient(tempVariables)
-	output.PropagateGradient([]float64{1}, grad)
-
-	res := ConstParamDelta{}
-	for i, mapVariable := range mapVariables {
-		res[mapVariable] = grad[tempVariables[i]]
-	}
-	return res
-}
-
-// Objective evaluates the Gauss-Newton approximation
-// at the given delta.
-func (g *GaussNewtonNN) Objective(delta ConstParamDelta, s sgd.SampleSet) float64 {
-	argDelta := ParamDelta{}
-	for variable, d := range delta {
-		argDelta[variable] = &autofunc.Variable{Vector: d}
-	}
-	return g.objective(argDelta, s).Output()[0]
+// ObjectiveAtZero applies the actual, unapproximated
+// objective function to its underlying variables.
+func (g *GaussNewtonNN) ObjectiveAtZero(s sgd.SampleSet) float64 {
+	sampleIns, sampleOuts := joinSamples(s)
+	output1 := g.Layers.Batch(sampleIns, s.Len())
+	output2 := g.Output.Batch(output1, s.Len())
+	cost := g.Cost.Cost(sampleOuts, output2)
+	return cost.Output()[0]
 }
 
 // objective evaluates the approximated objective
