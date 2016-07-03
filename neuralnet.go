@@ -86,7 +86,8 @@ func (g *GaussNewtonNN) QuadHessian(delta ConstParamDelta, s sgd.SampleSet) Cons
 // objective function to its underlying variables.
 func (g *GaussNewtonNN) ObjectiveAtZero(s sgd.SampleSet) float64 {
 	sampleIns, sampleOuts := joinSamples(s)
-	output1 := g.Layers.Batch(sampleIns, s.Len())
+	inputs := &autofunc.Variable{Vector: sampleIns}
+	output1 := g.Layers.Batch(inputs, s.Len())
 	output2 := g.Output.Batch(output1, s.Len())
 	cost := g.Cost.Cost(sampleOuts, output2)
 	return cost.Output()[0]
