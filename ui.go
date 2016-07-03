@@ -11,6 +11,7 @@ import (
 // A UI logs information about a Hessian Free training
 // session and accepts input from the user.
 type UI interface {
+	LogCGStart(initQuad, quadLast float64)
 	LogCGIteration(stepSize, quadValue float64)
 	LogNewMiniBatch(epochNumber, batchNumber int)
 	ShouldStop() bool
@@ -37,6 +38,10 @@ func NewConsoleUI() *ConsoleUI {
 	}()
 
 	return res
+}
+
+func (c *ConsoleUI) LogCGStart(initQuad, quadLast float64) {
+	log.Printf("Starting CG (quad=%f, baseline=%f)", initQuad, quadLast)
 }
 
 func (c *ConsoleUI) LogCGIteration(stepSize, quadValue float64) {

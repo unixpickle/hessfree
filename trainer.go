@@ -176,12 +176,13 @@ func (c *cgSolver) initializeIfNeeded() {
 		c.residual.scale(-1)
 		c.projectedResidual = c.residual
 		c.residualMag2 = c.residual.magSquared()
-		c.startObjective = c.Objective.Quad(ConstParamDelta{}, c.Samples)
+		c.startObjective = c.Objective.Objective(ConstParamDelta{}, c.Samples)
+		c.Trainer.UI.LogCGStart(c.Objective.Quad(c.Solution, c.Samples), c.startObjective)
 	}
 }
 
 func (c *cgSolver) converging() bool {
-	if len(c.quadValues) < 2 {
+	if len(c.quadValues) < 2 || c.quadValues[len(c.quadValues)-1] > c.startObjective {
 		return false
 	}
 
