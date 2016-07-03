@@ -3,6 +3,7 @@ package hessfree
 import (
 	"github.com/unixpickle/autofunc"
 	"github.com/unixpickle/sgd"
+	"github.com/unixpickle/weakai/neuralnet"
 )
 
 const defaultDampingCoeff = 1
@@ -32,6 +33,47 @@ type Learner interface {
 	// Adjust may need this sample set to analyze the effects
 	// of the delta, e.g. for damping purposes.
 	Adjust(d ConstParamDelta, s sgd.SampleSet)
+}
+
+// A NeuralNetLearner is a Learner which wraps a neural net
+// and creates concurrent Gauss-Newton objectives.
+type NeuralNetLearner struct {
+	// Parameters for the GaussNewtonNN objectives.
+	Layers neuralnet.Network
+	Output neuralnet.Network
+	Cost   neuralnet.CostFunc
+
+	// Parameters for the ConcurrentObjectives.
+	MaxSubBatch    int
+	MaxConcurrency int
+}
+
+// Parameters returns the parameters of n.Layers.
+func (n *NeuralNetLearner) Parameters() []*autofunc.Variable {
+	return n.Layers.Parameters()
+}
+
+// MakeObjective creates a ConcurrentObjective which
+// wraps a Gauss-Newton objective.
+func (n *NeuralNetLearner) MakeObjective() Objective {
+	var output autofunc.RBatcher
+	if n.Output != nil {
+		output = n.Output.BatchLearner()
+	}
+	return &ConcurrentObjective{
+		Wrapped: &GaussNewtonNN{
+			Layers: n.Layers.BatchLearner(),
+			Output: output,
+			Cost:   n.Cost,
+		},
+		MaxConcurrency: n.MaxConcurrency,
+		MaxSubBatch:    n.MaxSubBatch,
+	}
+}
+
+// Adjust adds the delta to its parameters.
+func (n *NeuralNetLearner) Adjust(d ConstParamDelta, s sgd.SampleSet) {
+	d.addToVars()
 }
 
 // A DampingLearner wraps a learner in the damping
@@ -74,7 +116,7 @@ func (d *DampingLearner) Adjust(delta ConstParamDelta, s sgd.SampleSet) {
 	quadOffset := d.lastObjective.Quad(delta, s)
 	centerVal := d.lastObjective.Objective(ConstParamDelta{}, s)
 	realOffset := d.lastObjective.Objective(ConstParamDelta{}, s)
-	delta.addToVars()
+	d.WrappedLearner.Adjust(delta, s)
 
 	trust := (realOffset - centerVal) / (quadOffset - centerVal)
 	if trust < 0.25 {
