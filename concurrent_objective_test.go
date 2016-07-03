@@ -106,16 +106,16 @@ func objectiveTestSamples(count int) sgd.SampleSet {
 	return samples
 }
 
-func testObjectiveEquivalence(t *testing.T, actual, expected Objective, delta ConstParamDelta,
+func testObjectiveEquivalence(t *testing.T, actual, expected QuadObjective, delta ConstParamDelta,
 	s sgd.SampleSet) {
-	actualOut := actual.Objective(delta, s)
-	expectedOut := expected.Objective(delta, s)
+	actualOut := actual.Quad(delta, s)
+	expectedOut := expected.Quad(delta, s)
 	if math.Abs(actualOut-expectedOut) > objectiveTestPrec {
 		t.Error("output should be", expectedOut, "but got", actualOut)
 	}
 
-	actualGrad := actual.ObjectiveGrad(delta, s)
-	expectedGrad := expected.ObjectiveGrad(delta, s)
+	actualGrad := actual.QuadGrad(delta, s)
+	expectedGrad := expected.QuadGrad(delta, s)
 GradCheckLoop:
 	for variable, actualVec := range actualGrad {
 		expectedVec := expectedGrad[variable]
@@ -128,8 +128,8 @@ GradCheckLoop:
 		}
 	}
 
-	actualHess := actual.ObjectiveHessian(delta, s)
-	expectedHess := expected.ObjectiveHessian(delta, s)
+	actualHess := actual.QuadHessian(delta, s)
+	expectedHess := expected.QuadHessian(delta, s)
 HessCheckLoop:
 	for variable, actualVec := range actualHess {
 		expectedVec := expectedHess[variable]
