@@ -116,7 +116,7 @@ func (c *cgSolver) Step() (shouldContinue bool) {
 
 	projHessian := c.Objective.QuadHessian(c.projectedResidual, c.Samples)
 	projHessianMag := c.projectedResidual.dot(projHessian)
-	if projHessianMag == 0 {
+	if projHessianMag == 0 || c.residualMag2 == 0 {
 		return false
 	}
 
@@ -174,7 +174,7 @@ func (c *cgSolver) initializeIfNeeded() {
 	if c.residual == nil {
 		c.residual = c.Objective.QuadGrad(c.Solution, c.Samples)
 		c.residual.scale(-1)
-		c.projectedResidual = c.residual
+		c.projectedResidual = c.residual.copy()
 		c.residualMag2 = c.residual.magSquared()
 		c.startObjective = c.Objective.Objective(ConstParamDelta{}, c.Samples)
 		c.Trainer.UI.LogCGStart(c.Objective.Quad(c.Solution, c.Samples), c.startObjective)
