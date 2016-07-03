@@ -67,3 +67,10 @@ func (p ParamRDelta) zeroGradient() autofunc.Gradient {
 // A ConstParamDelta is like a ParamDelta, except that
 // the delta vectors are constant vectors.
 type ConstParamDelta map[*autofunc.Variable]linalg.Vector
+
+// AddToVars adds the delta to its underlying variables.
+func (c ConstParamDelta) AddToVars() {
+	for variable, delta := range c {
+		variable.Vector.Add(delta)
+	}
+}
