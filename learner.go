@@ -74,7 +74,7 @@ func (d *DampingLearner) Adjust(delta ConstParamDelta, s sgd.SampleSet) {
 	quadOffset := d.lastObjective.Quad(delta, s)
 	centerVal := d.lastObjective.Objective(ConstParamDelta{}, s)
 	realOffset := d.lastObjective.Objective(ConstParamDelta{}, s)
-	delta.AddToVars()
+	delta.addToVars()
 
 	trust := (realOffset - centerVal) / (quadOffset - centerVal)
 	if trust < 0.25 {

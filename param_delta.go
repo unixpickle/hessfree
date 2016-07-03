@@ -68,9 +68,49 @@ func (p ParamRDelta) zeroGradient() autofunc.Gradient {
 // the delta vectors are constant vectors.
 type ConstParamDelta map[*autofunc.Variable]linalg.Vector
 
-// AddToVars adds the delta to its underlying variables.
-func (c ConstParamDelta) AddToVars() {
+// addToVars adds the delta to its underlying variables.
+func (c ConstParamDelta) addToVars() {
 	for variable, delta := range c {
 		variable.Vector.Add(delta)
+	}
+}
+
+// magSquared returns the squared magnitude of the delta.
+func (c ConstParamDelta) magSquared() float64 {
+	return c.dot(c)
+}
+
+// dot returns the dot product of two deltas.
+func (c ConstParamDelta) dot(c1 ConstParamDelta) float64 {
+	var res float64
+	for v, x := range c {
+		res += x.DotFast(c1[v])
+	}
+	return res
+}
+
+// copy returns a copy of this delta.
+func (c ConstParamDelta) copy() ConstParamDelta {
+	res := ConstParamDelta{}
+	for v, x := range c {
+		res[v] = make(linalg.Vector, len(x))
+		copy(res[v], x)
+	}
+	return res
+}
+
+// scale scales the delta by the given scaler.
+func (c ConstParamDelta) scale(scaler float64) {
+	for _, x := range c {
+		x.Scale(scaler)
+	}
+}
+
+// addDelta adds a scaled version of the given delta
+// to this delta.
+func (c ConstParamDelta) addDelta(c1 ConstParamDelta, scaler float64) {
+	// TODO: optimize this using BLAS.
+	for v, x := range c {
+		x.Add(c1[v].Copy().Scale(scaler))
 	}
 }
