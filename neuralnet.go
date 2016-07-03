@@ -16,9 +16,16 @@ import (
 // and output layer are matching as described in
 // http://nic.schraudolph.org/pubs/Schraudolph02.pdf.
 type GaussNewtonNN struct {
+	// Layers is all of the layers of the neural net
+	// up to the last one.
 	Layers autofunc.RBatcher
+
+	// Output is the output layer of the network.
+	// If this is nil, the output from the Layers
+	// is fed directly into the cost function.
 	Output autofunc.RBatcher
-	Cost   neuralnet.CostFunc
+
+	Cost neuralnet.CostFunc
 }
 
 // Quad evaluates the Gauss-Newton approximation
@@ -88,9 +95,7 @@ func (g *GaussNewtonNN) ObjectiveAtZero(s sgd.SampleSet) float64 {
 	sampleIns, sampleOuts := joinSamples(s)
 	inputs := &autofunc.Variable{Vector: sampleIns}
 	output1 := g.Layers.Batch(inputs, s.Len())
-	output2 := g.Output.Batch(output1, s.Len())
-	cost := g.Cost.Cost(sampleOuts, output2)
-	return cost.Output()[0]
+	return g.outFunc(sampleOuts, s.Len()).Apply(output1).Output()[0]
 }
 
 // objective evaluates the approximated objective
@@ -155,11 +160,19 @@ type netOutFunc struct {
 }
 
 func (n *netOutFunc) Apply(in autofunc.Result) autofunc.Result {
-	out1 := n.LastLayer.Batch(in, n.SampleCount)
-	return n.CostFunc.Cost(n.SampleOuts, out1)
+	if n.LastLayer != nil {
+		out1 := n.LastLayer.Batch(in, n.SampleCount)
+		return n.CostFunc.Cost(n.SampleOuts, out1)
+	} else {
+		return n.CostFunc.Cost(n.SampleOuts, in)
+	}
 }
 
 func (n *netOutFunc) ApplyR(v autofunc.RVector, in autofunc.RResult) autofunc.RResult {
-	out1 := n.LastLayer.BatchR(v, in, n.SampleCount)
-	return n.CostFunc.CostR(v, n.SampleOuts, out1)
+	if n.LastLayer != nil {
+		out1 := n.LastLayer.BatchR(v, in, n.SampleCount)
+		return n.CostFunc.CostR(v, n.SampleOuts, out1)
+	} else {
+		return n.CostFunc.CostR(v, n.SampleOuts, in)
+	}
 }
