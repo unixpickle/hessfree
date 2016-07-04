@@ -33,6 +33,8 @@ type Objective interface {
 
 	// Objective evaluates the true objective (rather than
 	// its approximation) at the given delta.
+	// The delta may be empty (i.e. contain no keys), in
+	// which case the objective is evaluated at offset=0.
 	Objective(delta ConstParamDelta, s sgd.SampleSet) float64
 }
 

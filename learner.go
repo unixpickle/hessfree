@@ -133,7 +133,7 @@ type dampedObjective struct {
 
 func (d *dampedObjective) Quad(delta ConstParamDelta, s sgd.SampleSet) float64 {
 	res := d.WrappedObjective.Quad(delta, s)
-	scaler := float64(s.Len())
+	scaler := float64(s.Len()) * d.Coeff
 	for _, subDelta := range delta {
 		for _, x := range subDelta {
 			res += scaler * x * x
@@ -145,7 +145,7 @@ func (d *dampedObjective) Quad(delta ConstParamDelta, s sgd.SampleSet) float64 {
 func (d *dampedObjective) QuadGrad(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
 	res := d.WrappedObjective.QuadGrad(delta, s)
 
-	scaler := float64(2 * s.Len())
+	scaler := float64(2*s.Len()) * d.Coeff
 	for variable, subDelta := range delta {
 		resVec := res[variable]
 		for i, x := range subDelta {
@@ -159,7 +159,7 @@ func (d *dampedObjective) QuadGrad(delta ConstParamDelta, s sgd.SampleSet) Const
 func (d *dampedObjective) QuadHessian(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
 	res := d.WrappedObjective.QuadHessian(delta, s)
 
-	scaler := float64(2 * s.Len())
+	scaler := float64(2*s.Len()) * d.Coeff
 	for variable, subDelta := range delta {
 		resVec := res[variable]
 		for i, x := range subDelta {
