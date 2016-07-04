@@ -120,10 +120,11 @@ func (d *DampingLearner) MakeObjective() Objective {
 func (d *DampingLearner) Adjust(delta ConstParamDelta, s sgd.SampleSet) {
 	quadOffset := d.lastObjective.Quad(delta, s)
 	centerVal := d.lastObjective.Objective(ConstParamDelta{}, s)
-	realOffset := d.lastObjective.Objective(ConstParamDelta{}, s)
+	realOffset := d.lastObjective.Objective(delta, s)
 	d.WrappedLearner.Adjust(delta, s)
 
 	trust := (realOffset - centerVal) / (quadOffset - centerVal)
+	d.UI.Log("DampingLearner", fmt.Sprintf("trust quotient is %f", trust))
 	if trust < 0.25 {
 		d.DampingCoeff *= 3.0 / 2.0
 		if d.UI != nil {
