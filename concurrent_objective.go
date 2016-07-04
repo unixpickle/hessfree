@@ -22,8 +22,11 @@ type QuadObjective interface {
 	QuadGrad(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta
 
 	// QuadHessian applies the objective's approximation's
-	// Hessian to the delta.
-	QuadHessian(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta
+	// Hessian to the delta while simultaneously evaluating
+	// the approximation at x.
+	// This returns the result of the Hessian application
+	// and the value of the approximation at x.
+	QuadHessian(delta, x ConstParamDelta, s sgd.SampleSet) (ConstParamDelta, float64)
 }
 
 // Objective is an objective function which can be truly
@@ -84,11 +87,18 @@ func (c *ConcurrentObjective) QuadGrad(delta ConstParamDelta,
 	}, s)
 }
 
-func (c *ConcurrentObjective) QuadHessian(delta ConstParamDelta,
-	s sgd.SampleSet) ConstParamDelta {
-	return c.sumDeltas(func(subSet sgd.SampleSet) ConstParamDelta {
-		return c.Wrapped.QuadHessian(delta, subSet)
+func (c *ConcurrentObjective) QuadHessian(delta, x ConstParamDelta,
+	s sgd.SampleSet) (ConstParamDelta, float64) {
+	var yLock sync.Mutex
+	var y float64
+	deltaSum := c.sumDeltas(func(subSet sgd.SampleSet) ConstParamDelta {
+		res, localY := c.Wrapped.QuadHessian(delta, x, subSet)
+		yLock.Lock()
+		y += localY
+		yLock.Unlock()
+		return res
 	}, s)
+	return deltaSum, y
 }
 
 func (c *ConcurrentObjective) Objective(delta ConstParamDelta, s sgd.SampleSet) float64 {

@@ -99,6 +99,8 @@ type cgSolver struct {
 	residual          ConstParamDelta
 	projectedResidual ConstParamDelta
 	residualMag2      float64
+	hessianProduct    ConstParamDelta
+	lastQuadValue     float64
 
 	justBacktracked bool
 	backtrackCount  int
@@ -114,8 +116,7 @@ type cgSolver struct {
 func (c *cgSolver) Step() (shouldContinue bool) {
 	c.initializeIfNeeded()
 
-	projHessian := c.Objective.QuadHessian(c.projectedResidual, c.Samples)
-	projHessianMag := c.projectedResidual.dot(projHessian)
+	projHessianMag := c.projectedResidual.dot(c.hessianProduct)
 	if projHessianMag == 0 || c.residualMag2 == 0 {
 		return false
 	}
@@ -125,22 +126,24 @@ func (c *cgSolver) Step() (shouldContinue bool) {
 
 	c.Solution.addDelta(c.projectedResidual, stepSize)
 
-	quadOutput := c.Objective.Quad(c.Solution, c.Samples)
-	c.quadValues = append(c.quadValues, quadOutput)
-
-	c.Trainer.UI.LogCGIteration(stepSize, quadOutput)
-
-	if c.converging() {
-		return false
-	}
-
 	oldRMag2 := c.residualMag2
-	c.residual.addDelta(projHessian, -stepSize)
+	c.residual.addDelta(c.hessianProduct, -stepSize)
 	c.residualMag2 = c.residual.magSquared()
 
 	beta := c.residualMag2 / oldRMag2
 	c.projectedResidual.scale(beta)
 	c.projectedResidual.addDelta(c.residual, 1)
+
+	var quadValue float64
+	c.hessianProduct, quadValue = c.Objective.QuadHessian(c.projectedResidual,
+		c.Solution, c.Samples)
+	c.quadValues = append(c.quadValues, quadValue)
+
+	c.Trainer.UI.LogCGIteration(stepSize, quadValue)
+
+	if c.converging() {
+		return false
+	}
 
 	c.updateBacktracking()
 
@@ -177,7 +180,11 @@ func (c *cgSolver) initializeIfNeeded() {
 		c.projectedResidual = c.residual.copy()
 		c.residualMag2 = c.residual.magSquared()
 		c.startObjective = c.Objective.Objective(ConstParamDelta{}, c.Samples)
-		c.Trainer.UI.LogCGStart(c.Objective.Quad(c.Solution, c.Samples), c.startObjective)
+
+		var quadValue float64
+		c.hessianProduct, quadValue = c.Objective.QuadHessian(c.projectedResidual,
+			c.Solution, c.Samples)
+		c.Trainer.UI.LogCGStart(quadValue, c.startObjective)
 	}
 }
 

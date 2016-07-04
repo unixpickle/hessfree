@@ -63,18 +63,20 @@ func (g *GaussNewtonNN) QuadGrad(delta ConstParamDelta, s sgd.SampleSet) ConstPa
 }
 
 // QuadHessian applies the Hessian of the Gauss-Newton
-// approximation to the given delta.
-func (g *GaussNewtonNN) QuadHessian(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
+// approximation to the given delta while simultaneously
+// evaluating the approximation at x.
+func (g *GaussNewtonNN) QuadHessian(delta, x ConstParamDelta, s sgd.SampleSet) (ConstParamDelta,
+	float64) {
 	rDelta := ParamRDelta{}
 	var tempVariables []*autofunc.Variable
 	var mapVariables []*autofunc.Variable
 	for variable, d := range delta {
-		zeroVar := &autofunc.Variable{Vector: make(linalg.Vector, len(d))}
+		tempVar := &autofunc.Variable{Vector: x[variable]}
 		rDelta[variable] = &autofunc.RVariable{
-			Variable:   zeroVar,
+			Variable:   tempVar,
 			ROutputVec: d,
 		}
-		tempVariables = append(tempVariables, zeroVar)
+		tempVariables = append(tempVariables, tempVar)
 		mapVariables = append(mapVariables, variable)
 	}
 	output := g.objectiveR(rDelta, s)
@@ -86,7 +88,7 @@ func (g *GaussNewtonNN) QuadHessian(delta ConstParamDelta, s sgd.SampleSet) Cons
 	for i, mapVariable := range mapVariables {
 		res[mapVariable] = rgrad[tempVariables[i]]
 	}
-	return res
+	return res, output.Output()[0]
 }
 
 // ObjectiveAtZero applies the actual, unapproximated

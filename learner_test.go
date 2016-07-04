@@ -107,7 +107,11 @@ func testLearner(t *testing.T, l Learner, s sgd.SampleSet) {
 
 	value := objective.Quad(zeroDelta, s)
 	grad := objective.QuadGrad(zeroDelta, s)
-	rgrad := objective.QuadHessian(destination, s)
+	rgrad, valueFromRGrad := objective.QuadHessian(destination, zeroDelta, s)
+
+	if math.Abs(value-valueFromRGrad) > learnerTestPrec {
+		t.Error("Quad() gave", value, "but QuadHessian() gave", valueFromRGrad)
+	}
 
 	expectedVal := value + grad.dot(destination) + 0.5*rgrad.dot(destination)
 	actualVal := objective.Quad(destination, s)
@@ -145,6 +149,6 @@ func benchLearnerQuadApprox(b *testing.B, l Learner, s sgd.SampleSet) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		obj.QuadHessian(destination, s)
+		obj.QuadHessian(destination, destination, s)
 	}
 }

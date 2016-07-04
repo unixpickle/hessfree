@@ -128,8 +128,13 @@ GradCheckLoop:
 		}
 	}
 
-	actualHess := actual.QuadHessian(delta, s)
-	expectedHess := expected.QuadHessian(delta, s)
+	actualHess, actualOut := actual.QuadHessian(delta, delta, s)
+	expectedHess, expectedOut := expected.QuadHessian(delta, delta, s)
+
+	if math.Abs(actualOut-expectedOut) > objectiveTestPrec {
+		t.Error("(hessian) output should be", expectedOut, "but got", actualOut)
+	}
+
 HessCheckLoop:
 	for variable, actualVec := range actualHess {
 		expectedVec := expectedHess[variable]

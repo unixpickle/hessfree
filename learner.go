@@ -156,18 +156,25 @@ func (d *dampedObjective) QuadGrad(delta ConstParamDelta, s sgd.SampleSet) Const
 	return res
 }
 
-func (d *dampedObjective) QuadHessian(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
-	res := d.WrappedObjective.QuadHessian(delta, s)
+func (d *dampedObjective) QuadHessian(delta, x ConstParamDelta, s sgd.SampleSet) (ConstParamDelta,
+	float64) {
+	res, outVal := d.WrappedObjective.QuadHessian(delta, x, s)
 
-	scaler := float64(2*s.Len()) * d.Coeff
+	scaler := float64(s.Len()) * d.Coeff
+	rScaler := 2 * scaler
 	for variable, subDelta := range delta {
 		resVec := res[variable]
 		for i, x := range subDelta {
-			resVec[i] += scaler * x
+			resVec[i] += rScaler * x
+		}
+	}
+	for _, subDelta := range x {
+		for _, y := range subDelta {
+			outVal += scaler * y * y
 		}
 	}
 
-	return res
+	return res, outVal
 }
 
 func (d *dampedObjective) Objective(delta ConstParamDelta, s sgd.SampleSet) float64 {
