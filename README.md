@@ -9,5 +9,4 @@ I aim to make this package as general as possible. However, Hessian Free is much
 # TODO
 
  * Optimize the QuadHessian routine
-   * Some things don't need to be computed for back prop when all we want is the R-gradient, not the gradient itself.
    * We could easily return the (approximated) objective value at the same time as the hessian.

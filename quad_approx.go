@@ -171,11 +171,11 @@ func (q *quadApproxRResult) PropagateRGradient(upstream, upstreamR linalg.Vector
 	if q.Input.Constant(rg, g) {
 		return
 	}
+	if q.canOptimize(rg, g) {
+		q.optimizedProp(upstream, upstreamR, rg)
+		return
+	}
 	q.Lock.Lock()
-
-	// TODO: optimize this if the input is from a Linearizer and
-	// the Linearizer's input is from an RVariable.
-
 	if q.EvalResult == nil {
 		q.evaluate()
 	}
@@ -188,4 +188,44 @@ func (q *quadApproxRResult) PropagateRGradient(upstream, upstreamR linalg.Vector
 	downstreamR := rawGradient.Scale(upstreamR[0]).Add(gradDeriv.Scale(upstream[0]))
 	q.Lock.Unlock()
 	q.Input.PropagateRGradient(downstream, downstreamR, rg, g)
+}
+
+func (q *quadApproxRResult) canOptimize(rg autofunc.RGradient, g autofunc.Gradient) bool {
+	if len(g) > 0 {
+		return false
+	}
+	linInput, ok := q.Input.(*linearizerRResult)
+	if !ok {
+		return false
+	}
+	accountedFor := map[*autofunc.Variable]bool{}
+	for _, inResult := range linInput.Delta {
+		inRVar, ok := inResult.(*autofunc.RVariable)
+		if !ok {
+			return false
+		}
+		accountedFor[inRVar.Variable] = true
+	}
+	for v := range rg {
+		if !accountedFor[v] {
+			return false
+		}
+	}
+	return true
+}
+
+func (q *quadApproxRResult) optimizedProp(upstream, upstreamR linalg.Vector,
+	rg autofunc.RGradient) {
+	q.Lock.Lock()
+	if q.EvalResult == nil {
+		q.evaluate()
+	}
+	if q.REvalResult == nil {
+		q.evaluateR()
+	}
+	rawGradient := q.EvalGrad.Copy().Add(q.EvalHessProd)
+	gradDeriv := q.REvalHessProd.Copy()
+	downstreamR := rawGradient.Scale(upstreamR[0]).Add(gradDeriv.Scale(upstream[0]))
+	q.Lock.Unlock()
+	q.Input.(*linearizerRResult).OptimizedBackprop(downstreamR, rg)
 }
