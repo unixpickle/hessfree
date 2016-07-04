@@ -1,6 +1,8 @@
 package hessfree
 
 import (
+	"fmt"
+
 	"github.com/unixpickle/autofunc"
 	"github.com/unixpickle/sgd"
 	"github.com/unixpickle/weakai/neuralnet"
@@ -94,6 +96,9 @@ type DampingLearner struct {
 	// costs for each sample.
 	DampingCoeff float64
 
+	// If UI is set, it will be used to log damping updates.
+	UI UI
+
 	lastObjective Objective
 }
 
@@ -121,8 +126,16 @@ func (d *DampingLearner) Adjust(delta ConstParamDelta, s sgd.SampleSet) {
 	trust := (realOffset - centerVal) / (quadOffset - centerVal)
 	if trust < 0.25 {
 		d.DampingCoeff *= 3.0 / 2.0
+		if d.UI != nil {
+			d.UI.Log("DampingLearner", fmt.Sprintf("raised damping to %f",
+				d.DampingCoeff))
+		}
 	} else if trust > 0.75 {
 		d.DampingCoeff *= 2.0 / 3.0
+		if d.UI != nil {
+			d.UI.Log("DampingLearner", fmt.Sprintf("lowered damping to %f",
+				d.DampingCoeff))
+		}
 	}
 }
 

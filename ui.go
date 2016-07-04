@@ -14,6 +14,7 @@ type UI interface {
 	LogCGStart(initQuad, quadLast float64)
 	LogCGIteration(stepSize, quadValue float64)
 	LogNewMiniBatch(epochNumber, batchNumber int)
+	Log(sender, message string)
 	ShouldStop() bool
 }
 
@@ -50,6 +51,10 @@ func (c *ConsoleUI) LogCGIteration(stepSize, quadValue float64) {
 
 func (c *ConsoleUI) LogNewMiniBatch(epochNum, batchNum int) {
 	log.Printf("Next mini-batch (epoch=%d, batch=%d)", epochNum, batchNum)
+}
+
+func (c *ConsoleUI) Log(sender, message string) {
+	log.Printf("%s: %s", sender, message)
 }
 
 func (c *ConsoleUI) ShouldStop() bool {
