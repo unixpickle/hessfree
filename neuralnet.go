@@ -26,6 +26,8 @@ type GaussNewtonNN struct {
 	Output autofunc.RBatcher
 
 	Cost neuralnet.CostFunc
+
+	vecCache vecCache
 }
 
 // Quad evaluates the Gauss-Newton approximation
@@ -40,7 +42,7 @@ func (g *GaussNewtonNN) Quad(delta ConstParamDelta, s sgd.SampleSet) float64 {
 
 // QuadGradient computes the gradient of Gauss-Newton
 // approximation at the given delta.
-func (g *GaussNewtonNN) QuadGrad(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
+func (g *GaussNewtonNN) QuadGrad(delta ConstParamDelta, s sgd.SampleSet, out ConstParamDelta) {
 	argDelta := ParamDelta{}
 	var tempVariables []*autofunc.Variable
 	var mapVariables []*autofunc.Variable
@@ -52,24 +54,23 @@ func (g *GaussNewtonNN) QuadGrad(delta ConstParamDelta, s sgd.SampleSet) ConstPa
 	}
 	output := g.objective(argDelta, s)
 
-	grad := autofunc.NewGradient(tempVariables)
-	output.PropagateGradient([]float64{1}, grad)
-
-	res := ConstParamDelta{}
-	for i, mapVariable := range mapVariables {
-		res[mapVariable] = grad[tempVariables[i]]
+	grad := autofunc.Gradient{}
+	for i, tempVar := range tempVariables {
+		grad[tempVar] = out[mapVariables[i]]
 	}
-	return res
+	output.PropagateGradient([]float64{1}, grad)
 }
 
 // QuadHessian applies the Hessian of the Gauss-Newton
 // approximation to the given delta.
-func (g *GaussNewtonNN) QuadHessian(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta {
+func (g *GaussNewtonNN) QuadHessian(delta ConstParamDelta, s sgd.SampleSet, out ConstParamDelta) {
 	rDelta := ParamRDelta{}
 	var tempVariables []*autofunc.Variable
 	var mapVariables []*autofunc.Variable
 	for variable, d := range delta {
-		zeroVar := &autofunc.Variable{Vector: make(linalg.Vector, len(d))}
+		zeroVec := g.vecCache.Alloc(len(d))
+		defer g.vecCache.Release(zeroVec)
+		zeroVar := &autofunc.Variable{Vector: zeroVec}
 		rDelta[variable] = &autofunc.RVariable{
 			Variable:   zeroVar,
 			ROutputVec: d,
@@ -79,14 +80,11 @@ func (g *GaussNewtonNN) QuadHessian(delta ConstParamDelta, s sgd.SampleSet) Cons
 	}
 	output := g.objectiveR(rDelta, s)
 
-	rgrad := autofunc.NewRGradient(tempVariables)
-	output.PropagateRGradient([]float64{1}, []float64{0}, rgrad, nil)
-
-	res := ConstParamDelta{}
-	for i, mapVariable := range mapVariables {
-		res[mapVariable] = rgrad[tempVariables[i]]
+	rgrad := autofunc.RGradient{}
+	for i, tempVar := range tempVariables {
+		rgrad[tempVar] = out[mapVariables[i]]
 	}
-	return res
+	output.PropagateRGradient([]float64{1}, []float64{0}, rgrad, nil)
 }
 
 // ObjectiveAtZero applies the actual, unapproximated

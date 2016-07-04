@@ -3,7 +3,6 @@ package hessfree
 import (
 	"math"
 
-	"github.com/unixpickle/num-analysis/linalg"
 	"github.com/unixpickle/sgd"
 )
 
@@ -53,6 +52,7 @@ type Trainer struct {
 func (t *Trainer) Train() {
 	var epoch int
 	var lastSolution ConstParamDelta
+	var cache deltaCache
 	for {
 		shuffled := t.Samples.Copy()
 		sgd.ShuffleSampleSet(shuffled)
@@ -74,6 +74,7 @@ func (t *Trainer) Train() {
 				Objective: t.Learner.MakeObjective(),
 				Samples:   subset,
 				Solution:  lastSolution,
+				Cache:     cache,
 			}
 			for solver.Step() {
 				if t.UI.ShouldStop() {
@@ -83,6 +84,7 @@ func (t *Trainer) Train() {
 			useDelta := solver.Best()
 			lastSolution = solver.Solution
 			t.Learner.Adjust(useDelta, subset)
+			solver.Release()
 
 			miniBatch++
 		}
@@ -95,6 +97,7 @@ type cgSolver struct {
 	Objective Objective
 	Samples   sgd.SampleSet
 	Solution  ConstParamDelta
+	Cache     deltaCache
 
 	residual          ConstParamDelta
 	projectedResidual ConstParamDelta
@@ -114,7 +117,10 @@ type cgSolver struct {
 func (c *cgSolver) Step() (shouldContinue bool) {
 	c.initializeIfNeeded()
 
-	projHessian := c.Objective.QuadHessian(c.projectedResidual, c.Samples)
+	projHessian := c.allocDelta()
+	defer c.Cache.Release(projHessian)
+	c.Objective.QuadHessian(c.projectedResidual, c.Samples, projHessian)
+
 	projHessianMag := c.projectedResidual.dot(projHessian)
 	if projHessianMag == 0 || c.residualMag2 == 0 {
 		return false
@@ -150,12 +156,6 @@ func (c *cgSolver) Step() (shouldContinue bool) {
 // Best returns the best known solution, including the
 // current solution and all the backtracked ones.
 func (c *cgSolver) Best() ConstParamDelta {
-	if !c.justBacktracked {
-		btValue := c.Objective.Objective(c.Solution, c.Samples)
-		c.backtrackDeltas = append(c.backtrackDeltas, c.Solution)
-		c.backtrackValues = append(c.backtrackValues, btValue)
-		c.justBacktracked = true
-	}
 	var bestVal float64
 	var bestDelta ConstParamDelta
 	for i, v := range c.backtrackValues {
@@ -164,19 +164,42 @@ func (c *cgSolver) Best() ConstParamDelta {
 			bestVal = v
 		}
 	}
+	if !c.justBacktracked {
+		btValue := c.Objective.Objective(c.Solution, c.Samples)
+		if btValue < bestVal || bestDelta == nil {
+			return c.Solution
+		}
+	}
 	return bestDelta
+}
+
+// Release releases all the deltas back to the cache
+// except for the previous solution.
+func (c *cgSolver) Release() {
+	for _, tempDelta := range c.backtrackDeltas {
+		c.Cache.Release(tempDelta)
+	}
+	c.Cache.Release(c.residual)
+	c.Cache.Release(c.projectedResidual)
 }
 
 func (c *cgSolver) initializeIfNeeded() {
 	if c.Solution == nil {
-		c.Solution = c.zeroDelta()
+		// Will only happen in the first CG run, since
+		// information sharing is used.
+		c.Solution = c.allocDelta()
 	}
+
 	if c.residual == nil {
-		c.residual = c.Objective.QuadGrad(c.Solution, c.Samples)
+		c.residual = c.allocDelta()
+		c.Objective.QuadGrad(c.Solution, c.Samples, c.residual)
 		c.residual.scale(-1)
-		c.projectedResidual = c.residual.copy()
+		c.projectedResidual = c.allocDelta()
+		c.projectedResidual.copy(c.residual)
+
 		c.residualMag2 = c.residual.magSquared()
 		c.startObjective = c.Objective.Objective(ConstParamDelta{}, c.Samples)
+
 		c.Trainer.UI.LogCGStart(c.Objective.Quad(c.Solution, c.Samples), c.startObjective)
 	}
 }
@@ -224,15 +247,13 @@ func (c *cgSolver) updateBacktracking() {
 	}
 
 	btValue := c.Objective.Objective(c.Solution, c.Samples)
-	c.backtrackDeltas = append(c.backtrackDeltas, c.Solution.copy())
+	savedSolution := c.allocDelta()
+	savedSolution.copy(c.Solution)
+	c.backtrackDeltas = append(c.backtrackDeltas, savedSolution)
 	c.backtrackValues = append(c.backtrackValues, btValue)
 	c.justBacktracked = true
 }
 
-func (c *cgSolver) zeroDelta() ConstParamDelta {
-	delta := ConstParamDelta{}
-	for _, param := range c.Trainer.Learner.Parameters() {
-		delta[param] = make(linalg.Vector, len(param.Vector))
-	}
-	return delta
+func (c *cgSolver) allocDelta() ConstParamDelta {
+	return c.Cache.Alloc(c.Trainer.Learner.Parameters())
 }

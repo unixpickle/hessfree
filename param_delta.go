@@ -89,14 +89,11 @@ func (c ConstParamDelta) dot(c1 ConstParamDelta) float64 {
 	return res
 }
 
-// copy returns a copy of this delta.
-func (c ConstParamDelta) copy() ConstParamDelta {
-	res := ConstParamDelta{}
+// copy copies c1 into c.
+func (c ConstParamDelta) copy(c1 ConstParamDelta) {
 	for v, x := range c {
-		res[v] = make(linalg.Vector, len(x))
-		copy(res[v], x)
+		copy(x, c1[v])
 	}
-	return res
 }
 
 // scale scales the delta by the given scaler.
@@ -113,4 +110,13 @@ func (c ConstParamDelta) addDelta(c1 ConstParamDelta, scaler float64) {
 	for v, x := range c {
 		x.Add(c1[v].Copy().Scale(scaler))
 	}
+}
+
+// variables returns all the variables in the delta.
+func (c ConstParamDelta) variables() []*autofunc.Variable {
+	var res []*autofunc.Variable
+	for v := range c {
+		res = append(res, v)
+	}
+	return res
 }

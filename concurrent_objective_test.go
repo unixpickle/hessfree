@@ -114,8 +114,13 @@ func testObjectiveEquivalence(t *testing.T, actual, expected QuadObjective, delt
 		t.Error("output should be", expectedOut, "but got", actualOut)
 	}
 
-	actualGrad := actual.QuadGrad(delta, s)
-	expectedGrad := expected.QuadGrad(delta, s)
+	var dc deltaCache
+	vars := delta.variables()
+
+	actualGrad := dc.Alloc(vars)
+	expectedGrad := dc.Alloc(vars)
+	actual.QuadGrad(delta, s, actualGrad)
+	expected.QuadGrad(delta, s, expectedGrad)
 GradCheckLoop:
 	for variable, actualVec := range actualGrad {
 		expectedVec := expectedGrad[variable]
@@ -128,8 +133,11 @@ GradCheckLoop:
 		}
 	}
 
-	actualHess := actual.QuadHessian(delta, s)
-	expectedHess := expected.QuadHessian(delta, s)
+	actualHess, expectedHess := actualGrad, expectedGrad
+	actualHess.scale(0)
+	expectedHess.scale(0)
+	actual.QuadHessian(delta, s, actualHess)
+	expected.QuadHessian(delta, s, expectedHess)
 HessCheckLoop:
 	for variable, actualVec := range actualHess {
 		expectedVec := expectedHess[variable]

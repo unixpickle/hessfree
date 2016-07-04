@@ -18,12 +18,18 @@ type QuadObjective interface {
 	Quad(delta ConstParamDelta, s sgd.SampleSet) float64
 
 	// QuadGrad computes the gradient of the objective's
-	// quadratic approximation.
-	QuadGrad(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta
+	// quadratic approximation and adds it to gradOut.
+	//
+	// Since this is additive, you may want to ensure that
+	// vecOut is initially set all 0's.
+	QuadGrad(delta ConstParamDelta, s sgd.SampleSet, gradOut ConstParamDelta)
 
 	// QuadHessian applies the objective's approximation's
-	// Hessian to the delta.
-	QuadHessian(delta ConstParamDelta, s sgd.SampleSet) ConstParamDelta
+	// Hessian to the delta and adds the result to vecOut.
+	//
+	// Since this is additive, you may want to ensure that
+	// vecOut is initially set all 0's.
+	QuadHessian(delta ConstParamDelta, s sgd.SampleSet, vecOut ConstParamDelta)
 }
 
 // Objective is an objective function which can be truly
@@ -67,6 +73,8 @@ type ConcurrentObjective struct {
 	// can be passed to the wrapped Objective at once.
 	// If this is 0, a reasonable default is used.
 	MaxSubBatch int
+
+	deltaCache deltaCache
 }
 
 func (c *ConcurrentObjective) Quad(delta ConstParamDelta, s sgd.SampleSet) float64 {
@@ -76,17 +84,17 @@ func (c *ConcurrentObjective) Quad(delta ConstParamDelta, s sgd.SampleSet) float
 }
 
 func (c *ConcurrentObjective) QuadGrad(delta ConstParamDelta,
-	s sgd.SampleSet) ConstParamDelta {
-	return c.sumDeltas(func(subSet sgd.SampleSet) ConstParamDelta {
-		return c.Wrapped.QuadGrad(delta, subSet)
-	}, s)
+	s sgd.SampleSet, sumOut ConstParamDelta) {
+	c.sumDeltas(func(subSet sgd.SampleSet, out ConstParamDelta) {
+		c.Wrapped.QuadGrad(delta, subSet, out)
+	}, s, sumOut)
 }
 
 func (c *ConcurrentObjective) QuadHessian(delta ConstParamDelta,
-	s sgd.SampleSet) ConstParamDelta {
-	return c.sumDeltas(func(subSet sgd.SampleSet) ConstParamDelta {
-		return c.Wrapped.QuadHessian(delta, subSet)
-	}, s)
+	s sgd.SampleSet, sumOut ConstParamDelta) {
+	c.sumDeltas(func(subSet sgd.SampleSet, out ConstParamDelta) {
+		c.Wrapped.QuadHessian(delta, subSet, out)
+	}, s, sumOut)
 }
 
 func (c *ConcurrentObjective) Objective(delta ConstParamDelta, s sgd.SampleSet) float64 {
@@ -124,17 +132,17 @@ func (c *ConcurrentObjective) sumValues(r func(sgd.SampleSet) float64, s sgd.Sam
 	return res
 }
 
-func (c *ConcurrentObjective) sumDeltas(r func(sgd.SampleSet) ConstParamDelta,
-	s sgd.SampleSet) ConstParamDelta {
+func (c *ConcurrentObjective) sumDeltas(r func(sgd.SampleSet, ConstParamDelta),
+	s sgd.SampleSet, sumOut ConstParamDelta) {
 	sampleChan := c.subBatchChan(s)
-
-	var res ConstParamDelta
 	deltaChan := make(chan ConstParamDelta, c.goroutineCount())
 
 	wg := c.runGoroutines(func() {
+		sum := c.deltaCache.Alloc(sumOut.variables())
 		for subSet := range sampleChan {
-			deltaChan <- r(subSet)
+			r(subSet, sum)
 		}
+		deltaChan <- sum
 	})
 	go func() {
 		wg.Wait()
@@ -142,17 +150,9 @@ func (c *ConcurrentObjective) sumDeltas(r func(sgd.SampleSet) ConstParamDelta,
 	}()
 
 	for delta := range deltaChan {
-		if res == nil {
-			res = delta
-		} else {
-			for variable, v := range delta {
-				resVec := res[variable]
-				resVec.Add(v)
-			}
-		}
+		sumOut.addDelta(delta, 1)
+		c.deltaCache.Release(delta)
 	}
-
-	return res
 }
 
 func (c *ConcurrentObjective) runGoroutines(r func()) *sync.WaitGroup {
