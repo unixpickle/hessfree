@@ -82,7 +82,7 @@ func (t *Trainer) Train() {
 			}
 			useDelta := solver.Best()
 			lastSolution = solver.Solution
-			t.Learner.Adjust(useDelta, subset)
+			t.Learner.Adjust(useDelta, lastSolution, subset)
 
 			miniBatch++
 		}

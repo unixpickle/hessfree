@@ -30,11 +30,16 @@ type Learner interface {
 	// Adjust updates the parameters after an Objective
 	// (created by MakeObjective()) has been minimized.
 	//
+	// Of the delta parameters, adjustment is the recommended
+	// change to the underlying parameters (bactracked), whereas
+	// quadMin is the last iterate of Conjugate Gradients,
+	// reflecting the supposed minimum of the quadratic objective.
+	//
 	// The provided SampleSet is the set of samples for which
 	// the given delta supposedly to improves the cost.
 	// Adjust may need this sample set to analyze the effects
 	// of the delta, e.g. for damping purposes.
-	Adjust(d ConstParamDelta, s sgd.SampleSet)
+	Adjust(adjustment, quadMin ConstParamDelta, s sgd.SampleSet)
 }
 
 // A NeuralNetLearner is a Learner which wraps a neural net
@@ -74,7 +79,7 @@ func (n *NeuralNetLearner) MakeObjective() Objective {
 }
 
 // Adjust adds the delta to its parameters.
-func (n *NeuralNetLearner) Adjust(d ConstParamDelta, s sgd.SampleSet) {
+func (n *NeuralNetLearner) Adjust(d, m ConstParamDelta, s sgd.SampleSet) {
 	d.addToVars()
 }
 
@@ -95,6 +100,11 @@ type DampingLearner struct {
 	// is assumed that the total cost is the sum of the
 	// costs for each sample.
 	DampingCoeff float64
+
+	// UseQuadMin can be used to specify that the minimum of
+	// the quadratic should be used to adjust damping, as
+	// opposed to the backtracked value.
+	UseQuadMin bool
 
 	// If UI is set, it will be used to log damping updates.
 	UI UI
@@ -117,13 +127,22 @@ func (d *DampingLearner) MakeObjective() Objective {
 	}
 }
 
-func (d *DampingLearner) Adjust(delta ConstParamDelta, s sgd.SampleSet) {
-	quadOffset := d.lastObjective.Quad(delta, s)
-	centerVal := d.lastObjective.Objective(ConstParamDelta{}, s)
-	realOffset := d.lastObjective.Objective(delta, s)
-	d.WrappedLearner.Adjust(delta, s)
+func (d *DampingLearner) Adjust(delta, quadMin ConstParamDelta, s sgd.SampleSet) {
+	var trust float64
 
-	trust := (realOffset - centerVal) / (quadOffset - centerVal)
+	centerVal := d.lastObjective.Objective(ConstParamDelta{}, s)
+	if d.UseQuadMin {
+		quadOffset := d.lastObjective.Quad(quadMin, s)
+		realOffset := d.lastObjective.Objective(quadMin, s)
+		trust = (realOffset - centerVal) / (quadOffset - centerVal)
+	} else {
+		quadOffset := d.lastObjective.Quad(delta, s)
+		realOffset := d.lastObjective.Objective(delta, s)
+		trust = (realOffset - centerVal) / (quadOffset - centerVal)
+	}
+
+	d.WrappedLearner.Adjust(delta, quadMin, s)
+
 	d.UI.Log("DampingLearner", fmt.Sprintf("trust quotient is %f", trust))
 	if trust < 0.25 {
 		d.DampingCoeff *= 3.0 / 2.0
