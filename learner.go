@@ -8,7 +8,10 @@ import (
 	"github.com/unixpickle/weakai/neuralnet"
 )
 
-const defaultDampingCoeff = 1
+const (
+	defaultDampingCoeff       = 1
+	defaultDampingChangeRatio = 1.5
+)
 
 // A Learner has learnable parameters and can create
 // Objectives based on a sample set and the current
@@ -106,6 +109,12 @@ type DampingLearner struct {
 	// opposed to the backtracked value.
 	UseQuadMin bool
 
+	// ChangeRatio is the amount by which the damping should
+	// be increased when the trust region should be shrunk.
+	// If this is 0, the value from Martens (2010) is used.
+	// If this is 1, the damping will never change.
+	ChangeRatio float64
+
 	// If UI is set, it will be used to log damping updates.
 	UI UI
 
@@ -128,6 +137,16 @@ func (d *DampingLearner) MakeObjective() Objective {
 }
 
 func (d *DampingLearner) Adjust(delta, quadMin ConstParamDelta, s sgd.SampleSet) {
+	changeCoeff := d.ChangeRatio
+	if changeCoeff == 0 {
+		changeCoeff = defaultDampingChangeRatio
+	}
+
+	if changeCoeff == 1 {
+		d.WrappedLearner.Adjust(delta, quadMin, s)
+		return
+	}
+
 	var trust float64
 
 	centerVal := d.lastObjective.Objective(ConstParamDelta{}, s)
@@ -145,13 +164,13 @@ func (d *DampingLearner) Adjust(delta, quadMin ConstParamDelta, s sgd.SampleSet)
 
 	d.UI.Log("DampingLearner", fmt.Sprintf("trust quotient is %f", trust))
 	if trust < 0.25 {
-		d.DampingCoeff *= 3.0 / 2.0
+		d.DampingCoeff *= changeCoeff
 		if d.UI != nil {
 			d.UI.Log("DampingLearner", fmt.Sprintf("raised damping to %f",
 				d.DampingCoeff))
 		}
 	} else if trust > 0.75 {
-		d.DampingCoeff *= 2.0 / 3.0
+		d.DampingCoeff /= changeCoeff
 		if d.UI != nil {
 			d.UI.Log("DampingLearner", fmt.Sprintf("lowered damping to %f",
 				d.DampingCoeff))
